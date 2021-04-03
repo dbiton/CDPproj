@@ -113,3 +113,15 @@ void RingSketch::unlockAll()
 	}
 }
 
+
+int  RingSketch::unlockAll()
+{
+	for (auto& mutex : sketchs_mutexes) {
+		mutex.unlock();
+	}
+}
+
+int RingSketch::hash(int e)
+{
+	return e % numSketchs();
+}
