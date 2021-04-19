@@ -7,14 +7,13 @@
 
 class RingSketch {
 	std::vector<CountMinSketch*> sketchs;
-	std::vector<std::mutex> sketchs_mutexes;
-	float error;
+	std::vector<std::mutex*> sketchs_mutexes;
+	float error_amount, error_prob;
 public:
-	RingSketch(int num_sketch_initial, float err_initial);
+	RingSketch(float err_prob, float err_amount_initial, int num_sketch_initial = 1);
 
 	void add(int e);
 	float query(int e);
-
 	void expand();
 	void shrink();
 private:

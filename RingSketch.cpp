@@ -1,41 +1,42 @@
 #include "RingSketch.h"
 
-RingSketch::RingSketch(int num_sketch_initial, float err_initial):
-	error(err_initial)
+RingSketch::RingSketch(float err_prob_initial, float err_amount_initial, int num_sketch_initial):
+	error_amount(err_amount_initial),
+	error_prob(err_prob_initial)
 {
 	for (int i = 0; i < num_sketch_initial; i++) {
-		sketchs.push_back(new CountMinSketch(num_sketch_initial * err_initial));
-		sketchs_mutexes.push_back(std::mutex());
+		sketchs.push_back(new CountMinSketch(error_prob, num_sketch_initial * error_amount));
+		sketchs_mutexes.push_back(new std::mutex());
 	}
 }
 
 void RingSketch::add(int e)
 {
 	int i = hash(e);
-	sketchs_mutexes[i].lock();
+	sketchs_mutexes[i]->lock();
 	sketchs[i]->add(e);
-	sketchs_mutexes[i].unlock();
+	sketchs_mutexes[i]->unlock();
 }
 
 float RingSketch::query(int e)
 {
 	int i = hash(e);
-	sketchs_mutexes[i].lock();
+	sketchs_mutexes[i]->lock();
 	float n = sketchs[i]->query(e);
-	sketchs_mutexes[i].unlock();
+	sketchs_mutexes[i]->unlock();
 	return n;
 }
 
 void RingSketch::expand()
 {
 	lockAll();
-	error *= numSketchs() / (numSketchs() + 1);
+	error_amount *= numSketchs() / (numSketchs() + 1);
 	int j = getFullestSketchIdx();
 	CountMinSketch* sketch_j = sketchs[j];
 	int i = (j - 1) % numSketchs();
 	if (i < 0) i += numSketchs(); // negative index when j = 0 fix
 	CountMinSketch* sketch_i = sketchs[i];
-	CountMinSketch* sketch_new = new CountMinSketch(numSketchs() * error);
+	CountMinSketch* sketch_new = new CountMinSketch(error_prob, numSketchs() * error_amount);
 	sketchs.insert(sketchs.begin() + i, sketch_new);
 	std::vector<int> events_split = sketch_i->collectAll();
 	for (auto& e : events_split) {
@@ -62,7 +63,7 @@ void RingSketch::shrink()
 	for (auto& e : heavy_hitters) {
 		sketch_successor->add(e);
 	}
-	error *= 2;
+	error_amount *= 2;
 	unlockAll();
 }
 
@@ -102,22 +103,14 @@ int RingSketch::numSketchs()
 void RingSketch::lockAll()
 {
 	for (auto& mutex : sketchs_mutexes) {
-		mutex.lock();
+		mutex->lock();
 	}
 }
 
 void RingSketch::unlockAll()
 {
 	for (auto& mutex : sketchs_mutexes) {
-		mutex.unlock();
-	}
-}
-
-
-int  RingSketch::unlockAll()
-{
-	for (auto& mutex : sketchs_mutexes) {
-		mutex.unlock();
+		mutex->unlock();
 	}
 }
 

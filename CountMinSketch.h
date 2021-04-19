@@ -4,20 +4,24 @@
 
 /*
 	Note: for now, sketchs only work with numbers. We can
-	trivially use templates in orde to generalize the data 
+	trivially use templates in order to generalize the data 
 	structure.
 */
 
 #include <vector>
+#include "madoka/lib/madoka.h"
 
 class CountMinSketch {
+	madoka::Sketch sketch;
+	unsigned num_events;
 public:
-	CountMinSketch(float err);
+	CountMinSketch(float err_prob, float err_amount);
+	~CountMinSketch();
 
 	void add(int e);
-	void remove(int e);
 	float query(int e);
-	int numEvents();
+	unsigned numEvents();
+
 	// returns all events held in sketch
 	std::vector<int> collectAll();
 	// returns only the "heavy hitter" events held in sketch
