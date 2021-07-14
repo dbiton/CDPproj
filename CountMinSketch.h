@@ -19,7 +19,6 @@ typedef madoka::SketchFilter sketchFilter;
 class CountMinSketch {
 	madoka::Sketch sketch;
 	unsigned num_events;
-	float flt_median;
 	float err_amount;
 public:
 	CountMinSketch(float err_amount);
@@ -29,9 +28,9 @@ public:
 	float query(int e) const;
 
 	unsigned numEvents() const;
-	unsigned median() const;
 	
 	void merge(const CountMinSketch& sketch);
+	// filter should remove about half of the events from the sketch for num_events to be updated accuretly 
 	void filter(sketchFilter filter);
 	
 	CountMinSketch* clone() const;

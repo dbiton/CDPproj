@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CountMinSketch.cpp" />
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="madoka\lib\madoka\file.cc" />
     <ClCompile Include="madoka\lib\madoka\sketch.cc" />
     <ClCompile Include="main.cpp" />
@@ -28,6 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CountMinSketch.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="madoka\lib\madoka.h" />
     <ClInclude Include="RedirGraph.h" />
     <ClInclude Include="RingSketch.h" />
