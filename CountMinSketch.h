@@ -1,37 +1,59 @@
-#pragma once
+/**
+    Daniel Alabi
+    Count-Min Sketch Implementation based on paper by
+    Muthukrishnan and Cormode, 2004
 
-/*
-	WRAPPER
-
-	This is used in order to decouple madoka from our code. Any Count Min Sketch that implements this 
-	interface can be used with RingSketch.
-
-	Note: for now, sketchs only work with numbers. We can
-	trivially use templates in order to generalize the data 
-	structure.
-*/
+    Note:
+    Code modified by Dvir David Biton
+**/
 
 #include <vector>
-#include "madoka/lib/madoka.h"
+#include <utility>
 
-typedef madoka::SketchFilter sketchFilter;
+// define some constants
+# define LONG_PRIME 4294967311l
+# define MIN(a,b)  (a < b ? a : b)
 
+/** CountMinSketch class definition here **/
 class CountMinSketch {
-	madoka::Sketch sketch;
-	unsigned num_events;
-	float err_amount;
+    // width, depth 
+    unsigned int w, d;
+
+    // eps (for error), 0.01 < eps < 1
+    // the smaller the better
+    float eps;
+
+    // gamma (probability for accuracy), 0 < gamma < 1
+    // the bigger the better
+    float gamma;
+
+    // total count so far
+    unsigned int total;
+
+    // array of arrays of counters
+    int** C;
+
+    // array of hash values for a particular item 
+    // contains two element arrays {aj,bj}
+    static std::vector<std::pair<int, int>> hash_keys;
+
+    // generate new hash key
+    void genHashKey();
 public:
-	CountMinSketch(float err_amount);
-	~CountMinSketch();
+    // constructor
+    CountMinSketch(float eps, float gamma);
+    // destructor
+    ~CountMinSketch();
 
-	void add(int e);
-	float query(int e) const;
+    // update item (int) by count c
+    void add(int item, int c = 0);
 
-	unsigned numEvents() const;
-	
-	void merge(const CountMinSketch& sketch);
-	// filter should remove about half of the events from the sketch for num_events to be updated accuretly 
-	void filter(sketchFilter filter);
-	
-	CountMinSketch* clone() const;
+    // estimate count of item i and return count
+    unsigned int query(int item);
+
+    // return total count
+    unsigned int numEvents();
+
+    // merge this sketch with some other sketch
+    void merge(const CountMinSketch& sketch_other);
 };

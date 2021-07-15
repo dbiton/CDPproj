@@ -13,15 +13,17 @@ uint32_t hash(uint32_t v, uint64_t key, uint32_t num_buckets) {
 	return ((uint64_t)v * n + m) % p % num_buckets;
 }
 
-RingSketch::RingSketch(float err_amount_initial, int num_sketch_initial) :
+RingSketch::RingSketch(float err_amount_initial, float err_prob, int num_sketch_initial, uint32_t _heavy_hitters_num) :
+	error_probability(err_prob),
 	error_amount(err_amount_initial),
 	redir_graph(num_sketch_initial),
 	size_initial(num_sketch_initial),
 	size_curr(num_sketch_initial),
+	heavy_hitters_num(_heavy_hitters_num),
 	total_added(0.f)
 {
 	for (int i = 0; i < num_sketch_initial; i++) {
-		sketchs[i] = new CountMinSketch(num_sketch_initial * error_amount);
+		sketchs[i] = new CountMinSketch(num_sketch_initial * error_amount, err_prob);
 		sketchs_mutexes[i] = new std::mutex();
 	}
 }
@@ -80,31 +82,16 @@ void RingSketch::expand()
 	int i = getFullestSketchIdx();
 
 	key_global = redir_graph.getKey(i);
-	
-	auto filter1 = [](madoka_uint64 v) {
-		bool select_original = hash(v, key_global, 2);
-		if (!select_original) {
-			return v;
-		}
-		else return (madoka_uint64)0;
-	};
-	auto filter0 = [](madoka_uint64 v) {
-		bool select_original = hash(v, key_global, 2);
-		if (select_original) {
-			return v;
-		}
-		else return (madoka_uint64)0;
-	};
 
 	CountMinSketch* sketch0 = sketchs[i];
-	CountMinSketch* sketch1 = sketch0->clone();
+	CountMinSketch* sketch1 = sketch0;
 
 	std::mutex* mutex0 = sketchs_mutexes[i];
 	std::mutex* mutex1 = new std::mutex;
 
-	//sketch0->filter(filter0);
-	//sketch1->filter(filter1);
-	
+	//sketch0->clear();
+	//sketch1->clear();
+
 	sketchs.erase(i);
 	sketchs_mutexes.erase(i);
 

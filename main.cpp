@@ -5,7 +5,7 @@
 #include "RingSketch.h"
 #include "Logger.h"
 
-#define ITER_NUM 4096*4
+#define ITER_NUM 4096*16
 #define THREAD_NUM 1
 #define ITER_THREAD ITER_NUM/THREAD_NUM
 #define KEY_MIN 1
@@ -13,13 +13,15 @@
 #define RING_SIZE_MIN 2
 #define RING_SIZE_INIT 4
 #define RING_SIZE_MAX 8
-#define RING_MODIFY_SIZE_EXP 512 // Expectancy of number of iterations between expand or shrink operations
-#define ERROR_MARGIN 0.01f
+#define RING_MODIFY_SIZE_EXP 1024 // Expectancy of number of iterations between expand or shrink operations
+#define ERROR_MARGIN 0.01
+#define ERROR_PROB 0.01
+#define HEAVY_HITTERS_NUM 64
 
 Logger logger;
 
-RingSketch sketch_ring(ERROR_MARGIN, RING_SIZE_INIT);
-CountMinSketch sketch_regular(ERROR_MARGIN);
+RingSketch sketch_ring(ERROR_MARGIN, ERROR_PROB, RING_SIZE_INIT, HEAVY_HITTERS_NUM);
+CountMinSketch sketch_regular(ERROR_MARGIN, ERROR_PROB);
 std::map<int, int> hashtable;
 std::mutex mutex_hash;
 
@@ -92,8 +94,11 @@ void run_thread() {
 	logger.write("output_test.txt");
 }
 
+
 int main()
 {
+	srand(0);
+
 	std::vector<std::thread> threads(THREAD_NUM);
 	for (int tid = 0; tid < THREAD_NUM; tid++) {
 		threads[tid] = std::thread(run_thread);
