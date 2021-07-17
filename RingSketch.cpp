@@ -10,20 +10,19 @@ uint32_t hash(uint32_t v, uint64_t key, uint32_t num_buckets) {
 	uint64_t p = (1ULL << 61) - 1;	// 2^61-1 is prime
 	uint32_t n = (uint32_t)key;
 	uint32_t m = (uint32_t)(key >> 32);
-	return ((uint64_t)v * n + m) % p % num_buckets;
+	uint32_t r =  ((uint64_t)v * n + m) % p % num_buckets;
+	return r;
 }
 
-RingSketch::RingSketch(float err_amount_initial, float err_prob, int num_sketch_initial, uint32_t _heavy_hitters_num) :
-	error_probability(err_prob),
+RingSketch::RingSketch(float err_amount_initial, int num_sketch_initial, int num_hh) :
 	error_amount(err_amount_initial),
 	redir_graph(num_sketch_initial),
 	size_initial(num_sketch_initial),
 	size_curr(num_sketch_initial),
-	heavy_hitters_num(_heavy_hitters_num),
 	total_added(0.f)
 {
 	for (int i = 0; i < num_sketch_initial; i++) {
-		sketchs[i] = new CountMinSketch(num_sketch_initial * error_amount, err_prob);
+		sketchs[i] = new CountMinSketch(num_sketch_initial * error_amount, num_hh);
 		sketchs_mutexes[i] = new std::mutex();
 	}
 }
@@ -76,6 +75,14 @@ float RingSketch::query(const std::set<uint32_t>& es)
 	return query(hashSet(es));
 }
 
+madoka_uint64 filter(madoka_uint64 v) {
+	bool select_original = hash(v, key_global, UINT32_MAX) > UINT32_MAX / 2;
+	if (!select_original) {
+		return v;
+	}
+	else return (madoka_uint64)0;
+}
+
 void RingSketch::expand()
 {
 	error_amount *= numSketchs() / (numSketchs() + 1);
@@ -84,14 +91,11 @@ void RingSketch::expand()
 	key_global = redir_graph.getKey(i);
 
 	CountMinSketch* sketch0 = sketchs[i];
-	CountMinSketch* sketch1 = sketch0;
+	CountMinSketch* sketch1 = sketch0->split(filter);
 
 	std::mutex* mutex0 = sketchs_mutexes[i];
 	std::mutex* mutex1 = new std::mutex;
-
-	//sketch0->clear();
-	//sketch1->clear();
-
+	
 	sketchs.erase(i);
 	sketchs_mutexes.erase(i);
 
@@ -116,7 +120,7 @@ void RingSketch::shrink()
 		CountMinSketch* sketch_emptiest = sketchs[i_emptiest];
 		CountMinSketch* sketch_2nd_emptiest = sketchs[i_2nd_emptiest];
 		
-		sketch_emptiest->merge(*sketch_2nd_emptiest);
+		sketch_2nd_emptiest->merge(*sketch_emptiest);
 		error_amount *= 2;
 		redir_graph.redirect(i_emptiest, i_2nd_emptiest);
 		
@@ -151,7 +155,7 @@ uint32_t RingSketch::getFullestSketchIdx()
 
 uint32_t RingSketch::getEmptiestSketchIdx(uint32_t& second_emptiest)
 {
-	auto& it = sketchs.begin();
+	auto it = sketchs.begin();
 	uint32_t i0, n0, i1, n1;
 	i0 = it->first;
 	n0 = it->second->numEvents();
@@ -224,7 +228,7 @@ uint32_t RingSketch::getSketchIdx(uint32_t e)
 	uint32_t sketch_idx;
 	for (sketch_idx = sketch_idx_initial; !redir_graph.isRoot(sketch_idx);) {
 		if (redir_graph.isSplit(sketch_idx)) {
-			bool select_original = hash(e, redir_graph.getKey(sketch_idx), 2);
+			bool select_original = hash(e, redir_graph.getKey(sketch_idx), UINT32_MAX) > UINT32_MAX / 2;
 			sketch_idx = redir_graph.getChild(sketch_idx, !select_original);
 		}
 		else {

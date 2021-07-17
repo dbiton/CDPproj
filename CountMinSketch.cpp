@@ -1,113 +1,121 @@
-# include <iostream>
-# include <cmath>
-# include <cstdlib>
-# include <ctime>
-# include <limits>
 #include "CountMinSketch.h"
+#include <string>
+#include <cmath>
+#include <algorithm>
 
-using namespace std;
-
-vector<pair<int,int>> CountMinSketch::hash_keys;
-
-/**
-   Class definition for CountMinSketch.
-   public operations:
-   // overloaded updates
-   void update(int item, int c);
-   void update(char *item, int c);
-   // overloaded estimates
-   unsigned int estimate(int item);
-   unsigned int estimate(char *item);
-**/
-
-
-// CountMinSketch constructor
-// ep -> error 0.01 < ep < 1 (the smaller the better)
-// gamma -> probability for error (the smaller the better) 0 < gamm < 1
-CountMinSketch::CountMinSketch(float ep, float gamm) {
-    if (!(0.009 <= ep && ep < 1)) {
-        cout << "eps must be in this range: [0.01, 1)" << endl;
-        exit(EXIT_FAILURE);
-    }
-    else if (!(0 < gamm && gamm < 1)) {
-        cout << "gamma must be in this range: (0,1)" << endl;
-        exit(EXIT_FAILURE);
-    }
-    eps = ep;
-    gamma = gamm;
-    w = ceil(exp(1) / eps);
-    d = ceil(log(1 / gamma));
-    total = 0;
-    // initialize counter array of arrays, C
-    C = new int* [d];
-    unsigned int i, j;
-    for (i = 0; i < d; i++) {
-        C[i] = new int[w];
-        for (j = 0; j < w; j++) {
-            C[i][j] = 0;
-        }
-    }
-    // initialize d pairwise independent hashes
-    while (hash_keys.size() < d) {
-        genHashKey();
-    }
-}
-
-// CountMinSkectch destructor
-CountMinSketch::~CountMinSketch() {
-    // free array of counters, C
-    unsigned int i;
-    for (i = 0; i < d; i++) {
-        delete[] C[i];
-    }
-    delete[] C;
-}
-
-// CountMinSketch totalcount returns the
-// total count of all items in the sketch
-unsigned int CountMinSketch::numEvents() {
-    return total;
-}
-
-// countMinSketch update item count (int)
-void CountMinSketch::add(int item, int c) {
-    total = total + c;
-    unsigned int hashval = 0;
-    for (unsigned int j = 0; j < d; j++) {
-        hashval = ((long)hash_keys[j].first * item + hash_keys[j].second) % LONG_PRIME % w;
-        C[j][hashval] = C[j][hashval] + c;
-    }
-}
-
-// CountMinSketch estimate item count (int)
-unsigned int CountMinSketch::query(int item) {
-    int minval = numeric_limits<int>::max();
-    unsigned int hashval = 0;
-    for (unsigned int j = 0; j < d; j++) {
-        hashval = ((long)hash_keys[j].first * item + hash_keys[j].second) % LONG_PRIME % w;
-        minval = MIN(minval, C[j][hashval]);
-    }
-    return minval;
-}
-
-// generates aj bj from field Z_p for use in hashing
-void CountMinSketch::genHashKey() {
-    int i0 = int(float(rand()) * float(LONG_PRIME) / float(RAND_MAX) + 1);
-    int i1 = int(float(rand()) * float(LONG_PRIME) / float(RAND_MAX) + 1);
-    hash_keys.push_back(std::make_pair(i0, i1));
-}
-
-void CountMinSketch::merge(const CountMinSketch& sketch_other)
+CountMinSketch::CountMinSketch(float _err_amount, int _num_hh) : 
+	num_events(0),
+	err_amount(_err_amount),
+	heavy_hitters(_num_hh, std::pair<uint32_t, uint32_t>(0,0))
 {
-    if (sketch_other.w != w || sketch_other.d != d) {
-        cout << "sketch dimensions must fit!" << endl;
-        exit(EXIT_FAILURE);
-    }
-    total += sketch_other.total;
-    unsigned int i, j;
-    for (i = 0; i < d; i++) {
-        for (j = 0; j < w; j++) {
-            C[i][j] += sketch_other.C[i][j];
-        }
-    }
+	float EULAR_NUM = 2.71828;
+	int width = std::ceil(EULAR_NUM / err_amount);
+	sketch.create(width, UINT32_MAX);
+}
+
+CountMinSketch::~CountMinSketch() {
+	sketch.close();
+}
+
+void CountMinSketch::add(int e) {
+	num_events++;
+	std::string e_str = std::to_string(e);
+	const char* e_cstr = e_str.c_str();
+	size_t e_len = e_str.length();
+	sketch.inc(e_cstr, e_len);
+	updateHeavyHitters(e, sketch.get(e_cstr, e_len));
+}
+
+int CountMinSketch::query(int e){
+	std::string e_str = std::to_string(e);
+	const char* e_cstr = e_str.c_str();
+	size_t e_len = e_str.length();
+	uint32_t count = sketch.get(e_cstr, e_len);
+	updateHeavyHitters(e, count);
+	return count;
+}
+
+unsigned CountMinSketch::numEvents() const {
+	return num_events;
+}
+
+void CountMinSketch::merge(const CountMinSketch& o)
+{
+	num_events = o.numEvents() + numEvents();
+
+	heavy_hitters.reserve(o.heavy_hitters.size() + heavy_hitters.size()); // preallocate memory
+	heavy_hitters.insert(heavy_hitters.end(), o.heavy_hitters.begin(), o.heavy_hitters.end());
+	
+	auto hh_pred = [](std::pair<uint32_t, uint32_t> hh0, std::pair<uint32_t, uint32_t> hh1) {
+		return hh0.second > hh1.second;
+	};
+	
+	std::sort(heavy_hitters.begin(), heavy_hitters.end(), hh_pred);
+	heavy_hitters.erase(heavy_hitters.begin() + o.heavy_hitters.size(), heavy_hitters.end());
+
+	sketch.merge(o.sketch);
+}
+
+void CountMinSketch::filter(sketchFilter sf)
+{
+	num_events /= 2;
+	sketch.filter(sf);
+}
+
+void CountMinSketch::clear()
+{
+	heavy_hitters = std::vector<std::pair<uint32_t, uint32_t>>(heavy_hitters.size(), std::pair<uint32_t, uint32_t>(0, 0));
+	sketch.clear();
+	num_events = 0;
+}
+
+CountMinSketch* CountMinSketch::clone() const
+{
+	CountMinSketch *s = new CountMinSketch(err_amount, heavy_hitters.size());
+	s->sketch.merge(sketch);
+	return s;
+}
+
+CountMinSketch* CountMinSketch::split(sketchFilter filter)
+{
+	auto hhs = heavy_hitters;
+	clear();
+	CountMinSketch* o = new CountMinSketch(err_amount, heavy_hitters.size());
+	int n0 = 0;
+	int n1 = 0;
+	for (uint32_t i = 0; i < hhs.size(); i++) {
+		auto hh = hhs[i];
+		int select = filter(hh.first);
+		if (select == 0) {
+			o->num_events += hh.second;
+			o->heavy_hitters[n0] = hh;
+			n0++;
+		}
+		else {
+			num_events += hh.second;
+			heavy_hitters[n1] = hh;
+			n1++;
+		}
+	}
+	return o;
+}
+
+void CountMinSketch::updateHeavyHitters(uint32_t e, uint32_t count)
+{
+	uint32_t min = UINT32_MAX;
+	uint32_t min_i = 0;
+	for (uint32_t i = 0; i < heavy_hitters.size(); i++) {
+		if (heavy_hitters[i].first == e) {
+			heavy_hitters[i].second = count;
+			return;
+		}
+		if (heavy_hitters[i].second < min) {
+			min = heavy_hitters[i].second;
+			min_i = i;
+		}
+	}
+	if (count > min) {
+		heavy_hitters[min_i].first = e;
+		heavy_hitters[min_i].second = count;
+	}
 }

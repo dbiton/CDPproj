@@ -26,6 +26,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RedirGraph.cpp" />
     <ClCompile Include="RingSketch.cpp" />
+    <ClCompile Include="Tester.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CountMinSketch.h" />
@@ -33,6 +34,7 @@
     <ClInclude Include="madoka\lib\madoka.h" />
     <ClInclude Include="RedirGraph.h" />
     <ClInclude Include="RingSketch.h" />
+    <ClInclude Include="Tester.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

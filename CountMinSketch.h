@@ -1,59 +1,44 @@
-/**
-    Daniel Alabi
-    Count-Min Sketch Implementation based on paper by
-    Muthukrishnan and Cormode, 2004
+#pragma once
 
-    Note:
-    Code modified by Dvir David Biton
-**/
+/*
+	WRAPPER
 
+	This is used in order to decouple madoka from our code. Any Count Min Sketch that implements this 
+	interface can be used with RingSketch.
+
+	Note: for now, sketchs only work with numbers. We can
+	trivially use templates in order to generalize the data 
+	structure.
+*/
+
+#include <map>
 #include <vector>
-#include <utility>
+#include "madoka/lib/madoka.h"
 
-// define some constants
-# define LONG_PRIME 4294967311l
-# define MIN(a,b)  (a < b ? a : b)
+typedef madoka::SketchFilter sketchFilter;
 
-/** CountMinSketch class definition here **/
 class CountMinSketch {
-    // width, depth 
-    unsigned int w, d;
-
-    // eps (for error), 0.01 < eps < 1
-    // the smaller the better
-    float eps;
-
-    // gamma (probability for accuracy), 0 < gamma < 1
-    // the bigger the better
-    float gamma;
-
-    // total count so far
-    unsigned int total;
-
-    // array of arrays of counters
-    int** C;
-
-    // array of hash values for a particular item 
-    // contains two element arrays {aj,bj}
-    static std::vector<std::pair<int, int>> hash_keys;
-
-    // generate new hash key
-    void genHashKey();
+	std::vector<std::pair<uint32_t, uint32_t>> heavy_hitters;
+	madoka::Sketch sketch;
+	unsigned num_events;
+	float err_amount;
 public:
-    // constructor
-    CountMinSketch(float eps, float gamma);
-    // destructor
-    ~CountMinSketch();
+	CountMinSketch(float err_amount, int num_hh);
+	~CountMinSketch();
 
-    // update item (int) by count c
-    void add(int item, int c = 0);
+	void add(int e);
+	int query(int e);
 
-    // estimate count of item i and return count
-    unsigned int query(int item);
+	unsigned numEvents() const;
+	
+	void merge(const CountMinSketch& sketch);
+	// filter should remove about half of the events from the sketch for num_events to be updated accuretly 
+	void filter(sketchFilter filter);
+	
+	void clear();
 
-    // return total count
-    unsigned int numEvents();
-
-    // merge this sketch with some other sketch
-    void merge(const CountMinSketch& sketch_other);
+	CountMinSketch* clone() const;
+	CountMinSketch* split(sketchFilter filter);
+private:
+	void updateHeavyHitters(uint32_t e, uint32_t count);
 };

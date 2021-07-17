@@ -17,11 +17,12 @@ class RingSketch {
 	float error_amount;
 	uint32_t size_initial, size_curr;
 	float total_added;
+	int num_hh;
 
 	bool has_target_err;
 	float target_err;
 public:
-	RingSketch(float err_amount_initial, int num_sketch_initial = 1);
+	RingSketch(float err_amount_initial, int num_sketch_initial, int num_hh);
 
 	void add(uint32_t e);
 	void add(std::set<uint32_t> es);
