@@ -3,9 +3,15 @@
 #include <algorithm>
 #include <iostream>
 
+// This key is used for no particular reason, any concat of uneven 32 bit integers would work
 const uint64_t KEY_DEFAULT = 0x6666DEADBABE3333;
+// This is a trick, so that we can have a function with a state - since we want to pass a filter function
+// in CountMinSketch's split, yet the function needs to depend on a redir node's key. This can be replaced,
+// but works for now.
 uint64_t key_global = KEY_DEFAULT;
 
+
+// Simple hash function, does it's job
 uint32_t hash(uint32_t v, uint64_t key, uint32_t num_buckets) {
 	uint64_t p = (1ULL << 61) - 1;	// 2^61-1 is prime
 	uint32_t n = (uint32_t)key;
@@ -27,14 +33,6 @@ RingSketch::RingSketch(float err_amount_initial, int num_sketch_initial, int num
 	}
 }
 
-void RingSketch::printSizes() {
-	std::cout << "XXXXXXXXXXXXXXXXX" << std::endl;
-	for (auto& s : sketchs) {
-		std::cout << s.second->numEvents() << " ";
-	}
-	std::cout << std::endl << "XXXXXXXXXXXXXXXXX" << std::endl;
-}
-
 void RingSketch::add(uint32_t e)
 {
 	uint32_t i = getSketchIdx(e);
@@ -47,11 +45,14 @@ void RingSketch::add(uint32_t e)
 void RingSketch::add(std::set<uint32_t> es)
 {
 	if (es.size() == 1) {
+		// base case - use the regular add function
 		add(*es.begin());
 	}
 	else {
+		// add this set (by hashing it, then treating it like a regular key)
 		add(hashSet(es));
 		std::set<uint32_t> es_copy = es;
+		// go over every n-1 sized subset of es and call add on it 
 		for (auto& e : es) {
 			es_copy.erase(e);
 			add(es_copy);
@@ -60,22 +61,25 @@ void RingSketch::add(std::set<uint32_t> es)
 	}
 }
 
-float RingSketch::query(uint32_t e)
+int RingSketch::query(uint32_t e)
 {
 	uint32_t i = getSketchIdx(e);
 	//sketchs_mutexes[i]->lock();
-	float n = sketchs[i]->query(e);
+	uint32_t n = sketchs[i]->query(e);
+	// simple sanity check, helps deal with extreme edge cases
 	n = std::min(total_added, n);
 	//sketchs_mutexes[i]->unlock();
 	return n;
 }
 
-float RingSketch::query(const std::set<uint32_t>& es)
+int RingSketch::query(const std::set<uint32_t>& es)
 {
 	return query(hashSet(es));
 }
 
 madoka_uint64 filter(madoka_uint64 v) {
+	// we generate 0 or 1 equal probability based on key_global - which is set to be
+	// the relevent redir node's key
 	bool select_original = hash(v, key_global, UINT32_MAX) > UINT32_MAX / 2;
 	if (!select_original) {
 		return v;
@@ -155,6 +159,7 @@ uint32_t RingSketch::getFullestSketchIdx()
 
 uint32_t RingSketch::getEmptiestSketchIdx(uint32_t& second_emptiest)
 {
+	// load first two sketchs' event count and indice
 	auto it = sketchs.begin();
 	uint32_t i0, n0, i1, n1;
 	i0 = it->first;
@@ -165,6 +170,7 @@ uint32_t RingSketch::getEmptiestSketchIdx(uint32_t& second_emptiest)
 
 	uint32_t min_i0, min_n0, min_i1, min_n1;
 
+	// set up min_i0 <= min_i1
 	if (n0 < n1) {
 		min_i0 = i0;
 		min_n0 = n0;
@@ -178,10 +184,10 @@ uint32_t RingSketch::getEmptiestSketchIdx(uint32_t& second_emptiest)
 		min_n1 = n0;
 	}
 
+	// advance it so that it points to the third sketch
 	it++;
 
 	while (it != sketchs.end()) {
-		
 		uint32_t i = it->first;
 		CountMinSketch* sketch = it->second;
 		int cur_n = sketch->numEvents();
@@ -247,16 +253,4 @@ uint32_t RingSketch::hashSet(const std::set<uint32_t>& es)
 	}
 	std::cout << es_str << std::endl;
 	return std::hash<std::string>{}(es_str);
-}
-
-void RingSketch::targetResizeCheck()
-{
-	if (!has_target_err) {
-		return;
-	}
-
-	// expand
-	error_amount *= numSketchs() / (numSketchs() + 1);
-	// shrink	
-	error_amount *= 2;
 }
